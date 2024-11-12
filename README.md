@@ -1,4 +1,4 @@
-Supremo
+# Supremo - a game about Bonifacio, Written in C
 
 ![Main_Menu](https://github.com/oshit0/supremo/blob/main/resources/main_menu/main_screen.png)
 
