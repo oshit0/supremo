@@ -1,0 +1,231 @@
+#include <stdio.h>
+#include <limits.h>
+#include <float.h>
+#include "raylib.h"
+#include "raymath.h"
+
+#define MAX_NUM_BULLETS 1
+#define MAX_NUM_ENEMIES 50
+#define STAGE_1 4
+
+typedef struct Player{
+  Rectangle rec;
+  Vector2 speed;
+  Color color;
+} Player;
+
+typedef struct Enemy{
+  Rectangle rec;
+  Vector2 speed;
+  bool active;
+  Color color;
+} Enemy;
+
+typedef struct Bullet{
+  Rectangle rec;
+  Vector2 speed;
+  bool active;
+  Color color;
+} Bullet;
+
+static const int screen_width = 800;
+static const int screen_height = 450;
+
+static bool game_over = false;
+static bool pause = false;
+static int score = 0;
+static bool victory = false;
+
+static Player player = { 0 };
+static Enemy enemy[MAX_NUM_ENEMIES] = { 0 };
+static Vector2 closest_enemy = { 0 };
+static float enemy_distance = 0.0f;
+static Bullet bullet[MAX_NUM_BULLETS] = { 0 };
+
+static int fire_rate = 0;
+
+static int active_enemies = 0;
+static int enemies_killed = 0;
+
+static void init_game();
+static void update_game();
+static void draw_game();
+static void unload_game();
+
+int main(){
+  InitWindow(screen_width, screen_height, "SUPREMO");
+  init_game();
+  SetTargetFPS(60);
+  while(!WindowShouldClose()){
+    update_game();
+    draw_game();
+  }
+  unload_game();
+  CloseWindow();
+  return 0;
+}
+
+void init_game(){
+  fire_rate = 0;
+  pause = false;
+  game_over = false;
+  victory = false;
+  active_enemies = STAGE_1;
+  enemies_killed = 0;
+  score = 0;
+
+  player.rec.x = screen_width / 2;
+  player.rec.y = screen_height / 2;
+  player.rec.width = 20;
+  player.rec.height = 20;
+  player.speed.x = 5.0f;
+  player.speed.y = 5.0f;
+  player.color = BLACK;
+
+  for(int i = 0; i < STAGE_1; ++i){
+    enemy[i].rec.width = 20;
+    enemy[i].rec.height = 20;
+    enemy[i].rec.x = GetRandomValue(0 + enemy[i].rec.width, screen_width - enemy[i].rec.width);
+    enemy[i].rec.y = GetRandomValue(0 + enemy[i].rec.height, screen_height- enemy[i].rec.height);
+    enemy[i].speed.x = 0.5f;
+    enemy[i].speed.y = 0.5f;
+    enemy[i].active = true;
+    enemy[i].color = RED;
+  }
+  closest_enemy.x = -1;
+  closest_enemy.y = -1;
+  enemy_distance = FLT_MAX;
+
+  for(int i = 0; i < MAX_NUM_BULLETS; ++i){
+    bullet[i].rec.x = player.rec.x;
+    bullet[i].rec.y = player.rec.y + player.rec.height/4;
+    bullet[i].rec.width = 10;
+    //bullet[i].rec.height = 5;
+    bullet[i].rec.height = 10;
+    bullet[i].speed.x = 7.0f;
+    bullet[i].speed.y = 7.0f;
+    bullet[i].active = false;
+    bullet[i].color = GRAY;
+  }
+}
+
+void update_game(){
+  if(!game_over){
+    // <-Stage Change/Unlock Here->
+    if(IsKeyPressed('P')) pause = !pause;
+
+    if(!pause){
+      if(enemies_killed == active_enemies) victory = true;
+
+      if(IsKeyDown(KEY_RIGHT)) player.rec.x += player.speed.x;
+      if(IsKeyDown(KEY_LEFT)) player.rec.x -= player.speed.x;
+      if(IsKeyDown(KEY_UP)) player.rec.y -= player.speed.y;
+      if(IsKeyDown(KEY_DOWN)) player.rec.y += player.speed.y;
+
+      for(int i = 0; i < active_enemies; ++i){
+        if(CheckCollisionRecs(player.rec, enemy[i].rec)) game_over = true;
+      }
+
+      // <-Enemy Random Movement Here->
+      for(int i = 0; i < active_enemies; ++i){
+        if(enemy[i].active){
+          if(player.rec.x > enemy[i].rec.x) enemy[i].rec.x += enemy[i].speed.x;
+          if(player.rec.x < enemy[i].rec.x) enemy[i].rec.x -= enemy[i].speed.x;
+          if(player.rec.y > enemy[i].rec.y) enemy[i].rec.y += enemy[i].speed.y;
+          if(player.rec.y < enemy[i].rec.y) enemy[i].rec.y -= enemy[i].speed.y;
+        }
+      }
+
+      if(player.rec.x <= 0) player.rec.x = 0;
+      if(player.rec.x + player.rec.width >= screen_width) player.rec.x = screen_width - player.rec.width;
+      if(player.rec.y <= 0) player.rec.y = 0;
+      if(player.rec.y + player.rec.height >= screen_height) player.rec.y = screen_height - player.rec.height;
+
+      if (IsKeyDown(KEY_SPACE)){
+        fire_rate += 5;
+        for (int i = 0; i < MAX_NUM_BULLETS; i++){
+          if(!bullet[i].active && fire_rate % 20 == 0){
+            bullet[i].rec.x = player.rec.x;
+            bullet[i].rec.y = player.rec.y + player.rec.height/4;
+            bullet[i].active = true;
+            break;
+          }
+        }
+      }
+
+      enemy_distance = FLT_MAX;
+      // Range Calculator
+      for(int i = 0; i < MAX_NUM_BULLETS; ++i){
+        if(bullet[i].active){
+          for(int i = 0; i < active_enemies; ++i){
+            if(enemy[i].active){
+              // Simple distance formula sqrt((x1 - x2) * (x1 -x2) + (y1 - y2) * (y1 - y2)) i used ray math cause shit will be long af if i opted
+              // for this (i was lazy)
+              float tmp = (float)Vector2Distance((Vector2){player.rec.x, player.rec.y}, (Vector2){enemy[i].rec.x, enemy[i].rec.y});
+              if(tmp < enemy_distance){
+                enemy_distance = tmp;
+                closest_enemy = (Vector2){enemy[i].rec.x, enemy[i].rec.y};
+              }
+            }
+          }
+          //X Coord
+          if(bullet[i].rec.x > closest_enemy.x) bullet[i].rec.x -= bullet[i].speed.x;
+          if(bullet[i].rec.x < closest_enemy.x) bullet[i].rec.x += bullet[i].speed.x;
+          //Y Coord
+          if(bullet[i].rec.y > closest_enemy.y) bullet[i].rec.y -= bullet[i].speed.y;
+          if(bullet[i].rec.y < closest_enemy.y) bullet[i].rec.y += bullet[i].speed.y;
+
+          for(int j = 0; j < active_enemies; ++j){
+            if(enemy[j].active){
+              if(CheckCollisionRecs(bullet[i].rec, enemy[j].rec)){
+                bullet[i].active = false;
+                enemy[j].active = false;
+                enemy[j].rec.x = -100;
+                enemy[j].rec.y = -100;
+                fire_rate = 0;
+                enemies_killed++;
+                score += 100;
+              }
+              if(bullet[i].rec.x + bullet[i].rec.width >= screen_width){
+                bullet[i].active = false;
+                fire_rate = 0;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  else{
+    if(IsKeyPressed(KEY_ENTER)){
+      init_game();
+      game_over = false;
+    }
+  }
+}
+
+void draw_game(){
+  BeginDrawing();
+    ClearBackground(RAYWHITE);
+    if(!game_over){
+      DrawRectangleRec(player.rec, player.color);
+      // <- Add text fade here ex. Stage 1 ->
+      for(int i = 0; i < active_enemies; ++i){
+        if(enemy[i].active) DrawRectangleRec(enemy[i].rec, enemy[i].color);
+      }
+      for(int i = 0; i < MAX_NUM_BULLETS; ++i){
+        if(bullet[i].active) DrawRectangleRec(bullet[i].rec, bullet[i].color);
+      }
+      DrawText(TextFormat("%04i", score), 20, 20, 40, GRAY);
+      if(victory) DrawText("YOU WIN", screen_width / 2 - MeasureText("YOU WIN", 40) / 2, screen_height / 2 - 40, 40, BLACK);
+      if(pause) DrawText("GAME PAUSED", screen_width / 2 - MeasureText("GAME PAUSED", 40) / 2, screen_height / 2 - 40, 40, BLACK);
+    }
+    else{
+      DrawText("PRESS [ENTER] TO PLAY AGAIN", GetScreenWidth() / 2 - MeasureText("PRESS [ENTER] TO PLAY AGAIN", 20), GetScreenHeight() / 2 - 50, 20, GRAY);
+    }
+  EndDrawing();
+}
+
+void unload_game(){
+  // Don't forgor about freeing those sweet vrams
+}
