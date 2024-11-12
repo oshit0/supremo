@@ -3,6 +3,7 @@ Supremo
 Supremo is a game where you play as Bonifacio, defending the kubo from invading Spaniards by throwing bolo knives.
 
 This game was created as a final project for our Game Development Research in Senior High School. It is written in C and uses Raylib for graphics.
+
 Requirements
 
 To run the game, you will need the following:
